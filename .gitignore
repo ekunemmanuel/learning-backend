@@ -34,3 +34,7 @@ dist
 
 .dev.vars
 /generated/prisma
+
+# sql & plan documents
+*.sql
+plans/

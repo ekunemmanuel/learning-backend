@@ -11,16 +11,18 @@ const router = createRouter()
       tags: ["Index"],
       method: "get",
       path: "/",
+      summary: "API Health & Root Index",
+      description: "Returns the root health check message for the Accounts & Authentication API.",
       responses: {
         [HttpStatusCodes.OK]: jsonContent(
-          createMessageObjectSchema("Tasks API"),
-          "Tasks API Index",
+          createMessageObjectSchema("Accounts & Authentication API"),
+          "Accounts & Authentication API Index",
         ),
       },
     }),
     (c) => {
       return c.json({
-        message: "Tasks API",
+        message: "Accounts & Authentication API",
       }, HttpStatusCodes.OK);
     },
   );

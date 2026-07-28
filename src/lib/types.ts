@@ -5,6 +5,10 @@ import type { PinoLogger } from "hono-pino";
 export interface AppBindings {
   Variables: {
     logger: PinoLogger;
+    /** Set by the auth middleware on protected routes */
+    userId: string;
+    /** The active session ID for the current request */
+    sessionId: string;
   };
 };
 

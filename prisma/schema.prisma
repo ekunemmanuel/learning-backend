@@ -1,49 +1,343 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// ============================================================================
+// Accounts, Organizations & RBAC — Production Prisma Schema
+// Target Database: PostgreSQL
+// ============================================================================
 
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
 }
 
+
 datasource db {
   provider = "postgresql"
 }
 
-model Example {
-  id        Int      @id @default(autoincrement())
-  name      String
-  done      Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
-  @@map("examples")
-}
-
+/// Central human identity (personal account).
+/// Represents a single real-world person across all organizations and workspaces.
+/// Connects to:
+/// - Identities (1:N external SSO links)
+/// - Sessions (1:N active web sessions / refresh tokens)
+/// - ApiTokens (1:N personal API keys)
+/// - MfaMethods (1:N 2FA authenticator configurations)
+/// - MfaBackupCodes (1:N single-use recovery codes)
+/// - LoginAttempts (1:N historical login security audits)
+/// - CreatedOrganizations (1:N orgs created by this user)
+/// - Memberships (1:N team memberships across orgs)
+/// - Projects (1:N personal projects owned directly by this user)
+/// - AuditLogs (1:N actions performed as actor)
 model User {
-  id              String   @id @default(cuid())
-  name            String
-  email           String   @unique
-  phone           String   @unique
-  password        String
-  isEmailVerified Boolean  @default(false)
-  isPhoneVerified Boolean  @default(false)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String    @unique
+  username        String?   @unique
+  phone           String?   @unique
+  country         String?
+  passwordHash    String?   @map("password_hash")
+  name            String?
+  avatarUrl       String?   @map("avatar_url")
+  isEmailVerified Boolean   @default(false) @map("is_email_verified")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz
+  isPhoneVerified Boolean   @default(false) @map("is_phone_verified")
+  phoneVerifiedAt DateTime? @map("phone_verified_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+
+  identities           Identity[]
+  sessions             Session[]
+  apiTokens            ApiToken[]
+  mfaMethods           UserMfaMethod[]
+  mfaBackupCodes       UserMfaBackupCode[]
+  loginAttempts        LoginAttempt[]
+  createdOrganizations Organization[]     @relation("CreatedOrganizations")
+  memberships          Membership[]
+  invitedMemberships   Membership[]       @relation("InvitedMemberships")
+  invitedInvitations   Invitation[]       @relation("InvitedInvitations")
+  projects             Project[]
+  auditLogs            AuditLog[]
 
   @@map("users")
 }
 
+/// External OAuth & SSO authentication identity links (Google, GitHub, SAML).
+/// Connects to: User (belongs to 1 user via userId, deleted on cascade).
+model Identity {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String
+  providerUserId String   @map("provider_user_id")
+  providerEmail  String?  @map("provider_email")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([provider, providerUserId])
+  @@map("identities")
+}
+
+/// Active login sessions and long-lived Refresh Token store (`tokenHash`).
+/// Connects to: User (belongs to 1 user via userId, deleted on cascade).
+model Session {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique @map("token_hash")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz
+
+  @@map("sessions")
+}
+
+/// Personal programmatic API access tokens with fine-grained scope permissions.
+/// Connects to: User (belongs to 1 user via userId, deleted on cascade).
+model ApiToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique @map("token_hash")
+  scopes     String[]  @default([])
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz
+
+  @@map("api_tokens")
+}
+
+/// Configured 2FA / Multi-Factor Authentication methods (TOTP apps, WebAuthn keys).
+/// Connects to: User (belongs to 1 user via userId, deleted on cascade).
+model UserMfaMethod {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type            String
+  name            String    @default("Authenticator App")
+  secretEncrypted String?   @map("secret_encrypted")
+  isVerified      Boolean   @default(false) @map("is_verified")
+  lastUsedAt      DateTime? @map("last_used_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([userId, type])
+  @@map("user_mfa_methods")
+}
+
+/// Single-use emergency recovery backup codes generated upon 2FA configuration.
+/// Connects to: User (belongs to 1 user via userId, deleted on cascade).
+model UserMfaBackupCode {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @map("code_hash")
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("user_mfa_backup_codes")
+}
+
+/// Historical login attempt audit log and security lockout detector.
+/// Connects to: User (optional reference via userId, set to null on user deletion).
+model LoginAttempt {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String
+  userId        String?  @map("user_id") @db.Uuid
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  success       Boolean
+  failureReason String?  @map("failure_reason")
+  attemptedAt   DateTime @default(now()) @map("attempted_at") @db.Timestamptz
+
+  @@map("login_attempts")
+}
+
+/// Multi-tenant workspace or company entity.
+/// Connects to:
+/// - Creator User (via createdBy, set to null if creator user is deleted)
+/// - TrustedDomains (1:N domain auto-join rules)
+/// - Roles (1:N org-custom roles)
+/// - Memberships (1:N team members)
+/// - Invitations (1:N pending org invites)
+/// - Projects (1:N org-owned projects)
+/// - AuditLogs (1:N compliance records)
+model Organization {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  slug        String    @unique
+  billingPlan String    @default("free") @map("billing_plan")
+  createdBy   String?   @map("created_by") @db.Uuid
+  creator     User?     @relation("CreatedOrganizations", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+
+  trustedDomains TrustedDomain[]
+  roles          Role[]
+  memberships    Membership[]
+  invitations    Invitation[]
+  projects       Project[]
+  auditLogs      AuditLog[]
+
+  @@map("organizations")
+}
+
+/// Rules for auto-onboarding users whose email domain matches a verified corporate domain.
+/// Connects to: Organization (via organizationId), Default Role (via defaultRoleId).
+model TrustedDomain {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  domain         String
+  defaultRoleId  String       @map("default_role_id") @db.Uuid
+  defaultRole    Role         @relation(fields: [defaultRoleId], references: [id])
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([organizationId, domain])
+  @@map("trusted_domains")
+}
+
+/// System-defined global roles (null organizationId) or org-custom roles.
+/// Connects to:
+/// - Organization (optional reference via organizationId)
+/// - Permissions (N:M via RolePermission join table)
+/// - Memberships (assigned to members)
+/// - Invitations (assigned to pending invites)
+/// - TrustedDomains (assigned as default auto-join role)
+model Role {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  isSystem       Boolean       @default(false) @map("is_system")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  rolePermissions RolePermission[]
+  memberships     Membership[]
+  invitations     Invitation[]
+  trustedDomains  TrustedDomain[]
+
+  @@unique([organizationId, name])
+  @@map("roles")
+}
+
+/// Catalogs granular operational privileges throughout the system (e.g., `project.create`).
+/// Connects to: Roles (N:M via RolePermission join table).
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key         String   @unique
+  description String?
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+/// Many-to-many join table mapping fine-grained permissions to system/org roles.
+/// Connects to: Role (via roleId), Permission (via permissionId).
+model RolePermission {
+  roleId       String     @map("role_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @map("permission_id") @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+/// Core join table connecting a User identity to an Organization with an assigned Role.
+/// Connects to: User (via userId), Organization (via organizationId), Role (via roleId), Inviter User (via invitedBy).
+model Membership {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleId         String       @map("role_id") @db.Uuid
+  role           Role         @relation(fields: [roleId], references: [id])
+  status         String       @default("active")
+  invitedBy      String?      @map("invited_by") @db.Uuid
+  inviter        User?        @relation("InvitedMemberships", fields: [invitedBy], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([userId, organizationId])
+  @@map("memberships")
+}
+
+/// Pending membership offers sent to recipient email addresses before or after user registration.
+/// Connects to: Organization (via organizationId), Target Role (via roleId), Inviter User (via invitedBy).
+model Invitation {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  roleId         String       @map("role_id") @db.Uuid
+  role           Role         @relation(fields: [roleId], references: [id])
+  token          String       @unique
+  invitedBy      String?      @map("invited_by") @db.Uuid
+  inviter        User?        @relation("InvitedInvitations", fields: [invitedBy], references: [id], onDelete: SetNull)
+  status         String       @default("pending")
+  expiresAt      DateTime     @map("expires_at") @db.Timestamptz
+  acceptedAt     DateTime?    @map("accepted_at") @db.Timestamptz
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([organizationId, email, status])
+  @@map("invitations")
+}
+
+/// Sample application resource demonstrating Polymorphic Ownership (owned by Personal User OR Organization).
+/// Connects to: Owner User (via ownerUserId), Owner Organization (via ownerOrganizationId).
+model Project {
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  ownerUserId         String?       @map("owner_user_id") @db.Uuid
+  ownerUser           User?         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ownerOrganizationId String?       @map("owner_organization_id") @db.Uuid
+  ownerOrganization   Organization? @relation(fields: [ownerOrganizationId], references: [id], onDelete: Cascade)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt           DateTime?     @map("deleted_at") @db.Timestamptz
+
+  @@map("projects")
+}
+
+/// Append-only security and compliance audit log.
+/// Connects to: Organization (via organizationId), Actor User (via actorUserId).
+model AuditLog {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?       @map("organization_id") @db.Uuid
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorUserId    String?       @map("actor_user_id") @db.Uuid
+  actorUser      User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action         String
+  targetType     String        @map("target_type")
+  targetId       String?       @map("target_id") @db.Uuid
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("audit_logs")
+}
+
+/// Ephemeral 4-digit verification and password reset codes.
+/// Connects to: Target user email or phone (via identifier).
+
+enum OtpType {
+  email_verification
+  password_reset
+  phone_verification
+}
 model Otp {
   id         String   @id @default(cuid())
   identifier String
   code       String
+  type       OtpType  @default(email_verification)
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@unique([identifier, type])
   @@map("otps")
 }
