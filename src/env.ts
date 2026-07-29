@@ -17,8 +17,14 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]),
   DATABASE_URL: z.string().url(),
   LOGTAIL_SOURCE_TOKEN: z.string().optional(),
-  CORS_ORIGIN: z.string().default("http://localhost:5173"),
-})
+  CORS_ORIGIN: z
+    .string()
+    .default("http://localhost:5173")
+    .transform((val) => {
+      const origins = val.split(",").map(s => s.trim()).filter(Boolean);
+      return origins.length === 1 && origins[0] === "*" ? "*" : origins;
+    }),
+});
 
 export type env = z.infer<typeof EnvSchema>;
 

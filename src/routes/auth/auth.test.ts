@@ -19,6 +19,7 @@ let authToken = "";
 
 describe("auth routes", () => {
   beforeAll(async () => {
+    await prisma.$executeRawUnsafe("DROP INDEX IF EXISTS user_mfa_methods_user_id_type_key CASCADE;");
     await prisma.userMfaBackupCode.deleteMany();
     await prisma.userMfaMethod.deleteMany();
     await prisma.session.deleteMany();
@@ -222,5 +223,119 @@ describe("auth routes", () => {
       where: { userId: dbUser!.id },
     });
     expect(backupCodesCount).toBe(10);
+  });
+
+  it("handles CORS headers correctly for allowed and disallowed origins", async () => {
+    // Allowed origin request
+    const allowedRes = await client.auth.me.$get(
+      {},
+      { headers: { Origin: "http://localhost:5173" } }
+    );
+    expect(allowedRes.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+    expect(allowedRes.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(allowedRes.headers.get("cross-origin-resource-policy")).toBe("cross-origin");
+
+    // Disallowed origin request
+    const disallowedRes = await client.auth.me.$get(
+      {},
+      { headers: { Origin: "http://malicious-domain.com" } }
+    );
+    expect(disallowedRes.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("returns isMfaEnabled: true and preserves active MFA during unverified re-setup", async () => {
+    const dbUser = await prisma.user.findFirst({ orderBy: { createdAt: "desc" } });
+    
+    // Set an active verified MFA method
+    await prisma.userMfaMethod.create({
+      data: {
+        userId: dbUser!.id,
+        type: "totp",
+        name: "Active App",
+        secretEncrypted: "JBSWY3DPEHPK3PXP",
+        isVerified: true,
+      },
+    });
+
+    // 1. Check profile returns isMfaEnabled: true
+    const meRes = await client.auth.me.$get(
+      {},
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+    const meJson: any = await meRes.json();
+    expect(meRes.status).toBe(200);
+    expect(meJson.data.isMfaEnabled).toBe(true);
+
+    // 2. Setup a new MFA method (re-setup / change)
+    const setupRes = await client.auth["mfa"]["setup"].$post(
+      { json: { type: "totp", name: "New Authenticator App" } },
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+    expect(setupRes.status).toBe(200);
+    const setupJson: any = await setupRes.json();
+    expect(setupJson.data.methodId).toBeDefined();
+    expect(setupJson.data.isMfaEnabled).toBe(true);
+
+    // 3. User logs out or leaves without verifying new setup
+    // Active verified MFA should STILL allow login and require 2FA!
+    const loginRes = await client.auth.login.$post({
+      json: {
+        identifier: "pablodev",
+        password: "password123",
+      },
+    });
+    expect(loginRes.status).toBe(200);
+    const loginJson: any = await loginRes.json();
+    expect(loginJson.data.mfaRequired).toBe(true);
+  });
+
+  it("handles case-insensitive identifier matching during login and password reset", async () => {
+    // 1. Resend/Forgot password with uppercase username "PABLODEV"
+    const forgotRes = await client.auth["resend-otp"].$post({
+      json: {
+        identifier: "PABLODEV",
+        purpose: "password_reset",
+      },
+    });
+    expect(forgotRes.status).toBe(200);
+
+    const otpRecord = await prisma.otp.findFirst({
+      where: { type: "password_reset" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(otpRecord).toBeDefined();
+
+    // 2. Verify password reset OTP with mixed case identifier "PaBlOdEv"
+    const verifyRes = await client.auth.verify.$post({
+      json: {
+        identifier: "PaBlOdEv",
+        code: otpRecord!.code,
+        type: "password_reset",
+      },
+    });
+    expect(verifyRes.status).toBe(200);
+
+    // 3. Complete password reset with uppercase identifier "PABLODEV"
+    const resetRes = await client.auth["reset-password"].$post({
+      json: {
+        identifier: "PABLODEV",
+        code: otpRecord!.code,
+        newPassword: "newpassword123",
+      },
+    });
+    expect(resetRes.status).toBe(200);
+
+    // 4. Verify login works with new password and mixed case username "PaBlOdEv"
+    // (Remove active MFA method for user to test standard login)
+    const dbUser = await prisma.user.findFirst({ where: { email: "pablo@example.com" } });
+    await prisma.userMfaMethod.deleteMany({ where: { userId: dbUser!.id } });
+
+    const loginRes = await client.auth.login.$post({
+      json: {
+        identifier: "PaBlOdEv",
+        password: "newpassword123",
+      },
+    });
+    expect(loginRes.status).toBe(200);
   });
 });

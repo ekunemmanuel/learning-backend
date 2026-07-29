@@ -13,12 +13,12 @@ export const otpTypeSchema = z.enum(["email_verification", "phone_verification",
 // Signup Request Schema
 export const createAccountSchema = z.object({
   name: z.string().min(1).max(500),
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(8).max(100),
   username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain alphanumeric characters, underscores, and hyphens").optional(),
   phone: z.string().regex(e164PhoneRegex, "Phone number must be in E.164 international format (e.g. +1234567890)").optional(),
   country: z.string().optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarUrl: z.url().optional(),
 });
 
 // Verify OTP Request Schema (including type)
@@ -119,6 +119,7 @@ export const getMeResponseSchema = z.object({
   emailVerifiedAt: z.string().nullable().optional(),
   isPhoneVerified: z.boolean(),
   phoneVerifiedAt: z.string().nullable().optional(),
+  isMfaEnabled: z.boolean().default(false),
 });
 
 export const resendOtpResponseSchema = z.object({
@@ -144,6 +145,7 @@ export const mfaSetupResponseSchema = z.object({
   secret: z.string(),
   qrCodePayload: z.string(),
   qrCodeDataUrl: z.string().optional(),
+  isMfaEnabled: z.boolean().default(false),
 });
 
 export const mfaVerifyResponseSchema = z.object({

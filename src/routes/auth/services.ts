@@ -16,7 +16,7 @@ import {
   MfaVerifySchema,
   CreateApiTokenSchema,
 } from "./schema";
-import { generateOTP, hashText, generateRandomToken, normalizeCountryCode } from "./utils";
+import { generateOTP, hashText, generateRandomToken, generateBackupCode, normalizeBackupCode, normalizeCountryCode } from "./utils";
 
 // Duration constants
 const SESSION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -77,18 +77,43 @@ export const getOrCreateOtp = async (
   return otpCode;
 };
 
+/**
+ * Helper to resolve a user by Email, Username, or Phone number case-insensitively.
+ */
+export const findUserByIdentifier = async (rawIdentifier: string) => {
+  if (!rawIdentifier) return null;
+  const trimmed = rawIdentifier.trim();
+  const lowercased = trimmed.toLowerCase();
+
+  return db.user.findFirst({
+    where: {
+      OR: [
+        { email: lowercased },
+        { username: lowercased },
+        { phone: trimmed },
+        { email: { equals: trimmed, mode: "insensitive" } },
+        { username: { equals: trimmed, mode: "insensitive" } },
+      ],
+    },
+    include: { mfaMethods: { where: { isVerified: true } } },
+  });
+};
+
 export const createAccount = async (data: CreateAccountSchema) => {
+  const normalizedEmail = data.email.trim().toLowerCase();
+  const normalizedUsername = data.username ? data.username.trim().toLowerCase() : undefined;
+
   // Check for duplicate email, username, or phone
-  const existingEmail = await db.user.findUnique({
-    where: { email: data.email },
+  const existingEmail = await db.user.findFirst({
+    where: { email: { equals: normalizedEmail, mode: "insensitive" } },
   });
   if (existingEmail) {
     throw new AppError(HttpStatusCodes.BAD_REQUEST, "An account with this email already exists");
   }
 
-  if (data.username) {
-    const existingUsername = await db.user.findUnique({
-      where: { username: data.username },
+  if (normalizedUsername) {
+    const existingUsername = await db.user.findFirst({
+      where: { username: { equals: normalizedUsername, mode: "insensitive" } },
     });
     if (existingUsername) {
       throw new AppError(HttpStatusCodes.BAD_REQUEST, "Username is already taken");
@@ -109,8 +134,8 @@ export const createAccount = async (data: CreateAccountSchema) => {
 
   const user = await db.user.create({
     data: {
-      email: data.email,
-      username: data.username,
+      email: normalizedEmail,
+      username: normalizedUsername,
       phone: data.phone,
       country: normalizedCountry,
       name: data.name,
@@ -130,8 +155,8 @@ export const createAccount = async (data: CreateAccountSchema) => {
     },
   });
 
-  const otpCode = await getOrCreateOtp(data.email, "email_verification");
-  console.log(`[AUTH] Sent verification OTP ${otpCode} to ${data.email}`);
+  const otpCode = await getOrCreateOtp(user.email, "email_verification");
+  console.log(`[AUTH] Sent verification OTP ${otpCode} to ${user.email}`);
 
   return {
     message: "Account created successfully. An OTP has been sent for verification",
@@ -141,25 +166,16 @@ export const createAccount = async (data: CreateAccountSchema) => {
 export const verifyOtp = async (data: VerifyOtpSchema) => {
   const { identifier, code, type } = data;
 
-  // Resolve user target by email, phone, or username
-  const targetUser = await db.user.findFirst({
+  const targetUser = await findUserByIdentifier(identifier);
+  const targetIdentifier = targetUser?.email || identifier.trim().toLowerCase();
+
+  const otp = await db.otp.findFirst({
     where: {
       OR: [
-        { email: identifier },
-        { phone: identifier },
-        { username: identifier },
+        { identifier: targetIdentifier, type: type as OtpTypeEnum },
+        { identifier: identifier.trim().toLowerCase(), type: type as OtpTypeEnum },
+        { identifier: identifier.trim(), type: type as OtpTypeEnum },
       ],
-    },
-  });
-
-  const targetIdentifier = targetUser?.email || identifier;
-
-  const otp = await db.otp.findUnique({
-    where: {
-      identifier_type: {
-        identifier: targetIdentifier,
-        type: type as OtpTypeEnum,
-      },
     },
   });
 
@@ -228,18 +244,8 @@ export const verifyOtp = async (data: VerifyOtpSchema) => {
 export const resendOtp = async (data: ResendOtpSchema) => {
   const { identifier, purpose } = data;
 
-  // Resolve target by email, phone, or username
-  const user = await db.user.findFirst({
-    where: {
-      OR: [
-        { email: identifier },
-        { phone: identifier },
-        { username: identifier },
-      ],
-    },
-  });
-
-  const targetIdentifier = user?.email || identifier;
+  const user = await findUserByIdentifier(identifier);
+  const targetIdentifier = user?.email || identifier.trim().toLowerCase();
 
   if (user || purpose === "password_reset") {
     const otpCode = await getOrCreateOtp(targetIdentifier, purpose as OtpTypeEnum);
@@ -257,17 +263,8 @@ export const login = async (
 ) => {
   const { identifier, password, mfaCode } = data;
 
-  // Multi-identifier resolution: match by email OR phone OR username
-  const user = await db.user.findFirst({
-    where: {
-      OR: [
-        { email: identifier },
-        { phone: identifier },
-        { username: identifier },
-      ],
-    },
-    include: { mfaMethods: { where: { isVerified: true } } },
-  });
+  // Multi-identifier resolution: match by email OR phone OR username case-insensitively
+  const user = await findUserByIdentifier(identifier);
 
   const inputPasswordHash = await hashText(password);
 
@@ -316,9 +313,11 @@ export const login = async (
         where: { userId: user.id, usedAt: null },
       });
 
+      const inputHash = await hashText(mfaCode);
+      const normalizedInputHash = await hashText(normalizeBackupCode(mfaCode));
+
       for (const backupRecord of backupCodes) {
-        const inputHash = await hashText(mfaCode);
-        if (backupRecord.codeHash === inputHash) {
+        if (backupRecord.codeHash === inputHash || backupRecord.codeHash === normalizedInputHash) {
           isMfaValid = true;
           await db.userMfaBackupCode.update({
             where: { id: backupRecord.id },
@@ -407,11 +406,18 @@ export const loginWithMfa = async (
 export const getMe = async (userId: string) => {
   const user = await db.user.findUnique({
     where: { id: userId },
+    include: {
+      mfaMethods: {
+        where: { isVerified: true },
+      },
+    },
   });
 
   if (!user) {
     throw new AppError(HttpStatusCodes.NOT_FOUND, "User profile not found");
   }
+
+  const isMfaEnabled = user.mfaMethods.length > 0;
 
   return {
     id: user.id,
@@ -425,6 +431,7 @@ export const getMe = async (userId: string) => {
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : null,
     isPhoneVerified: user.isPhoneVerified,
     phoneVerifiedAt: user.phoneVerifiedAt ? user.phoneVerifiedAt.toISOString() : null,
+    isMfaEnabled,
   };
 };
 
@@ -512,24 +519,16 @@ export const logout = async (data: LogoutSchema) => {
 export const resetPassword = async (data: ResetPasswordSchema) => {
   const { identifier, code, newPassword } = data;
 
-  const user = await db.user.findFirst({
+  const user = await findUserByIdentifier(identifier);
+  const targetIdentifier = user?.email || identifier.trim().toLowerCase();
+
+  const otp = await db.otp.findFirst({
     where: {
       OR: [
-        { email: identifier },
-        { phone: identifier },
-        { username: identifier },
+        { identifier: targetIdentifier, type: "password_reset" },
+        { identifier: identifier.trim().toLowerCase(), type: "password_reset" },
+        { identifier: identifier.trim(), type: "password_reset" },
       ],
-    },
-  });
-
-  const targetIdentifier = user?.email || identifier;
-
-  const otp = await db.otp.findUnique({
-    where: {
-      identifier_type: {
-        identifier: targetIdentifier,
-        type: "password_reset",
-      },
     },
   });
 
@@ -574,10 +573,17 @@ export const resetPassword = async (data: ResetPasswordSchema) => {
 };
 
 export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
-  const user = await db.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    include: { mfaMethods: true },
+  });
+
   if (!user) {
     throw new AppError(HttpStatusCodes.NOT_FOUND, "User account not found for MFA setup");
   }
+
+  const activeMethod = user.mfaMethods.find((m) => m.type === data.type && m.isVerified);
+  const isMfaEnabled = Boolean(activeMethod);
 
   const accountName = user.email || user.username || userId;
 
@@ -590,32 +596,39 @@ export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
   });
   const qrCodeDataUrl = await QRCode.toDataURL(otpauth);
 
-  const mfaMethod = await db.userMfaMethod.upsert({
-    where: {
-      userId_type: {
+  // If there is an existing unverified draft method for this type, update it; otherwise create a new unverified method record
+  const unverifiedMethod = user.mfaMethods.find((m) => m.type === data.type && !m.isVerified);
+
+  let mfaMethod;
+  if (unverifiedMethod) {
+    mfaMethod = await db.userMfaMethod.update({
+      where: { id: unverifiedMethod.id },
+      data: {
+        name: data.name,
+        secretEncrypted: secret,
+      },
+    });
+  } else {
+    mfaMethod = await db.userMfaMethod.create({
+      data: {
         userId,
         type: data.type,
+        name: data.name,
+        secretEncrypted: secret,
+        isVerified: false,
       },
-    },
-    update: {
-      secretEncrypted: secret,
-      isVerified: false,
-    },
-    create: {
-      userId,
-      type: data.type,
-      name: data.name,
-      secretEncrypted: secret,
-      isVerified: false,
-    },
-  });
+    });
+  }
 
   return {
-    message: "MFA setup initiated",
+    message: isMfaEnabled
+      ? "New MFA setup initiated. Your existing 2FA remains active until you verify the new code."
+      : "MFA setup initiated",
     methodId: mfaMethod.id,
     secret,
     qrCodePayload: otpauth,
     qrCodeDataUrl,
+    isMfaEnabled,
   };
 };
 
@@ -654,6 +667,16 @@ export const verifyMfa = async (userId: string, data: MfaVerifySchema) => {
     },
   });
 
+  // Remove any previous verified MFA methods for this user & type now that new setup is verified
+  await db.userMfaMethod.deleteMany({
+    where: {
+      userId,
+      type: mfaMethod.type,
+      isVerified: true,
+      id: { not: mfaMethod.id },
+    },
+  });
+
   // Clear existing backup codes before generating new set of 10
   await db.userMfaBackupCode.deleteMany({
     where: { userId },
@@ -664,9 +687,9 @@ export const verifyMfa = async (userId: string, data: MfaVerifySchema) => {
   const backupCodeRecords = [];
 
   for (let i = 0; i < 10; i++) {
-    const code = generateRandomToken(8);
+    const code = generateBackupCode();
     rawBackupCodes.push(code);
-    const codeHash = await hashText(code);
+    const codeHash = await hashText(normalizeBackupCode(code));
     backupCodeRecords.push({
       userId,
       codeHash,

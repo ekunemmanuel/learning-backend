@@ -28,12 +28,15 @@ export default function createApp() {
   // Security middlewares
   app.use(cors({
     origin: env.CORS_ORIGIN,
-    allowHeaders: ["*"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-refresh-token"],
     allowMethods: ["POST", "GET", "OPTIONS", "PUT", "DELETE", "PATCH"],
+    credentials: true,
     maxAge: 86400,
   }));
-  app.use(secureHeaders());
-  app.use(globalRateLimiter);
+  app.use(secureHeaders({
+    crossOriginResourcePolicy: "cross-origin",
+  }));
+  app.use(globalRateLimiter); 
   
   // Core middlewares
   app.use(requestId())

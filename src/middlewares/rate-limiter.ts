@@ -35,7 +35,7 @@ export const globalRateLimiter = env.NODE_ENV === "test" ? passThrough : rateLim
 // 5 requests per 1 minute per IP.
 export const strictRateLimiter = env.NODE_ENV === "test" ? passThrough : rateLimiter({
   windowMs: 1 * 60 * 1000,
-  limit: 5,
+  limit: 10,
   standardHeaders: "draft-6",
   keyGenerator,
   message: {

@@ -121,7 +121,6 @@ model UserMfaMethod {
   lastUsedAt      DateTime? @map("last_used_at") @db.Timestamptz
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
-  @@unique([userId, type])
   @@map("user_mfa_methods")
 }
 

@@ -40,6 +40,20 @@ export function generateRandomToken(length = 32): string {
   return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export function generateBackupCode(): string {
+  // Use non-ambiguous uppercase alphanumeric characters (no 0/O, 1/I/L)
+  const charset = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+
+  const codeChars = Array.from(array, (byte) => charset[byte % charset.length]);
+  return `${codeChars.slice(0, 4).join("")}${codeChars.slice(4, 8).join("")}`; 
+}
+
+export function normalizeBackupCode(code: string): string {
+  return code.replace(/[\s-]/g, "").toUpperCase();
+}
+
 export function normalizeCountryCode(input?: string | null): string | null {
   if (!input || typeof input !== "string") return null;
   const trimmed = input.trim();
