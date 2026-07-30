@@ -422,6 +422,13 @@ export async function updateMemberRole(
     );
   }
 
+  if (targetMembership.userId === currentOrg.createdBy && data.roleName !== "Owner") {
+    throw new AppError(
+      HttpStatusCodes.BAD_REQUEST,
+      "The creator of the organization must always remain an Owner. Transfer workspace ownership first before changing role."
+    );
+  }
+
   const targetRole = await getOrCreateSystemRole(data.roleName);
 
   const updatedMembership = await db.membership.update({
@@ -483,6 +490,13 @@ export async function removeMember(
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
       "Only organization Owners and Admins can remove team members"
+    );
+  }
+
+  if (!isSelf && currentOrg.role === "Admin" && targetMembership.role.name === "Owner") {
+    throw new AppError(
+      HttpStatusCodes.FORBIDDEN,
+      "Admins cannot remove workspace Owners"
     );
   }
 
@@ -572,12 +586,11 @@ export async function createInvitation(
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-  // Delete existing pending invitation for same email/org if present
+  // Delete any previous invitations for same email/org (pending, accepted, or cancelled)
   await db.invitation.deleteMany({
     where: {
       organizationId: currentOrg.id,
       email: targetEmail,
-      status: "pending",
     },
   });
 
@@ -751,7 +764,7 @@ export async function acceptInvitation(
     );
   }
 
-  // Check if caller is already a member
+  // Check if caller is already an ACTIVE member
   const existingMembership = await db.membership.findUnique({
     where: {
       userId_organizationId: {
@@ -761,26 +774,46 @@ export async function acceptInvitation(
     },
   });
 
-  if (existingMembership) {
+  if (existingMembership && existingMembership.status === "active") {
     // Mark invitation accepted and return
     await db.invitation.update({
       where: { id: invitation.id },
       data: { status: "accepted", acceptedAt: new Date() },
     });
     return {
-      message: "You are already a member of this organization",
+      message: "You are already an active member of this organization",
       organizationId: invitation.organizationId,
     };
   }
 
   await db.$transaction(async (tx) => {
-    await tx.membership.create({
-      data: {
+    await tx.membership.upsert({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId: invitation.organizationId,
+        },
+      },
+      create: {
         userId,
         organizationId: invitation.organizationId,
         roleId: invitation.roleId,
         invitedBy: invitation.invitedBy,
         status: "active",
+      },
+      update: {
+        roleId: invitation.roleId,
+        invitedBy: invitation.invitedBy,
+        status: "active",
+      },
+    });
+
+    // Clean up any old invitation rows for this email in this org to prevent unique constraint collision on status='accepted'
+    await tx.invitation.deleteMany({
+      where: {
+        organizationId: invitation.organizationId,
+        email: invitation.email,
+        id: { not: invitation.id },
       },
     });
 

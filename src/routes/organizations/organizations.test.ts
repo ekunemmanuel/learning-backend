@@ -309,4 +309,94 @@ describe("organizations, memberships, and invitations routes", () => {
 
     expect(deleteRes.status).toBe(400);
   });
+
+  it("patch /organizations/:idOrSlug/members/:memberId prevents demoting workspace creator", async () => {
+    // Create temp organization to test creator demotion protection
+    const tempRes = await client.organizations.$post(
+      {
+        json: { name: "Creator Demotion Safeguard Org" },
+      },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const tempJson: any = await tempRes.json();
+    const tempSlug = tempJson.data.slug;
+
+    const membersRes = await client.organizations[":idOrSlug"]["members"].$get(
+      { param: { idOrSlug: tempSlug } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const membersJson: any = await membersRes.json();
+    const aliceMember = membersJson.data.find((m: any) => m.email === "alice@example.com");
+
+    const patchRes = await client.organizations[":idOrSlug"]["members"][":memberId"].$patch(
+      {
+        param: { idOrSlug: tempSlug, memberId: aliceMember.id },
+        json: { roleName: "Member" },
+      },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+
+    expect(patchRes.status).toBe(400);
+  });
+
+  it("post /organizations/invitations/accept allows re-inviting and re-joining a previously removed member", async () => {
+    // 1. Create org
+    const orgRes = await client.organizations.$post(
+      { json: { name: "Re-invite Test Org" } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const orgJson: any = await orgRes.json();
+    const orgSlug = orgJson.data.slug;
+
+    // 2. Invite Bob
+    const inviteRes1 = await client.organizations[":idOrSlug"]["invitations"].$post(
+      { param: { idOrSlug: orgSlug }, json: { email: "bob@example.com", roleName: "Member" } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const inviteJson1: any = await inviteRes1.json();
+
+    // 3. Bob accepts
+    await client.organizations["invitations"]["accept"].$post(
+      { json: { token: inviteJson1.data.token } },
+      { headers: { Authorization: `Bearer ${user2Token}` } }
+    );
+
+    // 4. User 1 removes Bob
+    const membersRes = await client.organizations[":idOrSlug"]["members"].$get(
+      { param: { idOrSlug: orgSlug } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const membersJson: any = await membersRes.json();
+    const bobMember = membersJson.data.find((m: any) => m.email === "bob@example.com");
+
+    await client.organizations[":idOrSlug"]["members"][":memberId"].$delete(
+      { param: { idOrSlug: orgSlug, memberId: bobMember.id } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+
+    // 5. Re-invite Bob
+    const inviteRes2 = await client.organizations[":idOrSlug"]["invitations"].$post(
+      { param: { idOrSlug: orgSlug }, json: { email: "bob@example.com", roleName: "Admin" } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const inviteJson2: any = await inviteRes2.json();
+
+    // 6. Bob accepts second invitation
+    const acceptRes2 = await client.organizations["invitations"]["accept"].$post(
+      { json: { token: inviteJson2.data.token } },
+      { headers: { Authorization: `Bearer ${user2Token}` } }
+    );
+
+    expect(acceptRes2.status).toBe(200);
+
+    // Verify Bob is back in the org with Admin role
+    const finalMembersRes = await client.organizations[":idOrSlug"]["members"].$get(
+      { param: { idOrSlug: orgSlug } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const finalMembersJson: any = await finalMembersRes.json();
+    const readdedBob = finalMembersJson.data.find((m: any) => m.email === "bob@example.com");
+    expect(readdedBob).toBeDefined();
+    expect(readdedBob.role).toBe("Admin");
+  });
 });
