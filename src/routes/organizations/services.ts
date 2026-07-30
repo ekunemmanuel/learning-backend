@@ -486,7 +486,7 @@ export async function removeMember(
 
   const isSelf = targetMembership.userId === userId;
 
-  if (!isSelf && currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
+  if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
       "Only organization Owners and Admins can remove team members"

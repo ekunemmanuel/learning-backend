@@ -399,4 +399,42 @@ describe("organizations, memberships, and invitations routes", () => {
     expect(readdedBob).toBeDefined();
     expect(readdedBob.role).toBe("Admin");
   });
+
+  it("delete /organizations/:idOrSlug/members/:memberId rejects when caller is a regular Member", async () => {
+    // 1. Create org
+    const orgRes = await client.organizations.$post(
+      { json: { name: "Member Self Delete Rejection Org" } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const orgJson: any = await orgRes.json();
+    const orgSlug = orgJson.data.slug;
+
+    // 2. Invite Bob as regular Member
+    const inviteRes = await client.organizations[":idOrSlug"]["invitations"].$post(
+      { param: { idOrSlug: orgSlug }, json: { email: "bob@example.com", roleName: "Member" } },
+      { headers: { Authorization: `Bearer ${user1Token}` } }
+    );
+    const inviteJson: any = await inviteRes.json();
+
+    // 3. Bob accepts
+    await client.organizations["invitations"]["accept"].$post(
+      { json: { token: inviteJson.data.token } },
+      { headers: { Authorization: `Bearer ${user2Token}` } }
+    );
+
+    // 4. Bob tries to delete himself
+    const membersRes = await client.organizations[":idOrSlug"]["members"].$get(
+      { param: { idOrSlug: orgSlug } },
+      { headers: { Authorization: `Bearer ${user2Token}` } }
+    );
+    const membersJson: any = await membersRes.json();
+    const bobMember = membersJson.data.find((m: any) => m.email === "bob@example.com");
+
+    const deleteRes = await client.organizations[":idOrSlug"]["members"][":memberId"].$delete(
+      { param: { idOrSlug: orgSlug, memberId: bobMember.id } },
+      { headers: { Authorization: `Bearer ${user2Token}` } }
+    );
+
+    expect(deleteRes.status).toBe(403);
+  });
 });
