@@ -1,13 +1,11 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "bundler",
     "target": "ES2023",
-    "strict": true,
-    "esModuleInterop": true,
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "baseUrl": "./",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "paths": {
       "@/*": ["./src/*"]
     },
@@ -15,7 +13,9 @@
     "types": [
       "node"
     ],
+    "strict": true,
     "outDir": "./dist",
+    "esModuleInterop": true,
     "skipLibCheck": true
   },
   "tsc-alias": {

@@ -1,9 +1,9 @@
 import { createRouter } from "@/lib/create-app";
+import { authMiddleware } from "@/middlewares/auth";
+import { strictRateLimiter } from "@/middlewares/rate-limiter";
 
 import * as handlers from "./handlers";
 import * as routes from "./routes";
-import { strictRateLimiter } from "@/middlewares/rate-limiter";
-import { authMiddleware } from "@/middlewares/auth";
 
 const router = createRouter().basePath("/auth");
 

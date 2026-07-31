@@ -1,8 +1,10 @@
-import type { Context, MiddlewareHandler, Next } from "hono";
+import type { MiddlewareHandler } from "hono";
+
 import { getCookie } from "hono/cookie";
-import { prisma as db } from "@/lib/prisma";
-import { AppError } from "@/lib/errors";
 import * as HttpStatusCodes from "stoker/http-status-codes";
+
+import { AppError } from "@/lib/errors";
+import { prisma as db } from "@/lib/prisma";
 import { hashText } from "@/routes/auth/utils";
 
 /**
@@ -22,10 +24,10 @@ import { hashText } from "@/routes/auth/utils";
  */
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   // 1. Read token from cookie, Authorization Bearer, or x-refresh-token header
-  let rawToken =
-    getCookie(c, "refreshToken") ||
-    c.req.header("x-refresh-token") ||
-    null;
+  let rawToken
+    = getCookie(c, "refreshToken")
+      || c.req.header("x-refresh-token")
+      || null;
 
   const authHeader = c.req.header("Authorization");
   if (!rawToken && authHeader?.startsWith("Bearer ")) {
@@ -35,7 +37,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
   if (!rawToken) {
     throw new AppError(
       HttpStatusCodes.UNAUTHORIZED,
-      "You must be signed in to access this resource"
+      "You must be signed in to access this resource",
     );
   }
 
@@ -60,14 +62,14 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
   if (session.revokedAt) {
     throw new AppError(
       HttpStatusCodes.UNAUTHORIZED,
-      "Your session has been revoked. Please sign in again"
+      "Your session has been revoked. Please sign in again",
     );
   }
 
   if (session.expiresAt < new Date()) {
     throw new AppError(
       HttpStatusCodes.UNAUTHORIZED,
-      "Your session has expired. Please sign in again"
+      "Your session has expired. Please sign in again",
     );
   }
 

@@ -1,6 +1,8 @@
 import type { MiddlewareHandler } from "hono";
-import { AppError } from "@/lib/errors";
+
 import * as HttpStatusCodes from "stoker/http-status-codes";
+
+import { AppError } from "@/lib/errors";
 
 /**
  * Role-Based Access Control (RBAC) Permission Middleware
@@ -15,7 +17,7 @@ export function requirePermission(permissionKey: string): MiddlewareHandler {
     if (!membership) {
       throw new AppError(
         HttpStatusCodes.FORBIDDEN,
-        "Tenant membership context missing. Add tenantMiddleware before permission checks."
+        "Tenant membership context missing. Add tenantMiddleware before permission checks.",
       );
     }
 
@@ -26,13 +28,13 @@ export function requirePermission(permissionKey: string): MiddlewareHandler {
     }
 
     const hasPermission = membership.role?.rolePermissions?.some(
-      (rp: any) => rp.permission?.key === permissionKey
+      (rp: any) => rp.permission?.key === permissionKey,
     );
 
     if (!hasPermission) {
       throw new AppError(
         HttpStatusCodes.FORBIDDEN,
-        `Forbidden - Required permission '${permissionKey}' is missing from your role`
+        `Forbidden - Required permission '${permissionKey}' is missing from your role`,
       );
     }
 

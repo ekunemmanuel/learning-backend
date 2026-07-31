@@ -1,5 +1,6 @@
-import { LRUCache } from "lru-cache";
 import type { Context, Next } from "hono";
+
+import { LRUCache } from "lru-cache";
 
 // A simple in-memory cache for GET requests
 const routeCache = new LRUCache<string, any>({
@@ -7,7 +8,7 @@ const routeCache = new LRUCache<string, any>({
   ttl: 1000 * 60 * 5, // 5 minutes time to live
 });
 
-export const cacheMiddleware = (options?: { ttl?: number }) => {
+export function cacheMiddleware(options?: { ttl?: number }) {
   return async (c: Context, next: Next) => {
     // We only cache GET requests
     if (c.req.method !== "GET") {
@@ -30,15 +31,16 @@ export const cacheMiddleware = (options?: { ttl?: number }) => {
     if (c.res.status === 200) {
       // Clone the response so we can read its body without consuming the original
       const clonedRes = c.res.clone();
-      
+
       try {
         const body = await clonedRes.json();
         const ttl = options?.ttl || 1000 * 60 * 5;
         routeCache.set(key, body, { ttl });
         c.header("X-Cache", "MISS");
-      } catch (err) {
+      }
+      catch {
         // Not JSON or unable to parse, do not cache
       }
     }
   };
-};
+}

@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-
 import * as HttpStatusCodes from "stoker/http-status-codes";
 
 import env from "@/env";
@@ -79,7 +78,7 @@ export async function getOrCreateSystemRole(roleName: "Owner" | "Admin" | "Membe
 
 export async function createOrganization(
   userId: string,
-  data: CreateOrganizationSchema
+  data: CreateOrganizationSchema,
 ): Promise<OrganizationSchema> {
   const slug = await generateUniqueSlug(data.name, data.slug);
   const ownerRole = await getOrCreateSystemRole("Owner");
@@ -154,7 +153,7 @@ export async function getUserOrganizations(userId: string): Promise<Organization
     },
   });
 
-  return memberships.map((m) => ({
+  return memberships.map(m => ({
     id: m.organization.id,
     name: m.organization.name,
     slug: m.organization.slug,
@@ -169,10 +168,10 @@ export async function getUserOrganizations(userId: string): Promise<Organization
 
 export async function getOrganizationByIdOrSlug(
   userId: string,
-  idOrSlug: string
+  idOrSlug: string,
 ): Promise<OrganizationSchema> {
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const isUuid
+    = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrSlug);
 
   const organization = await db.organization.findFirst({
     where: {
@@ -205,7 +204,7 @@ export async function getOrganizationByIdOrSlug(
   if (!membership || membership.status !== "active") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "You are not an active member of this organization"
+      "You are not an active member of this organization",
     );
   }
 
@@ -225,14 +224,14 @@ export async function getOrganizationByIdOrSlug(
 export async function updateOrganization(
   userId: string,
   idOrSlug: string,
-  data: UpdateOrganizationSchema
+  data: UpdateOrganizationSchema,
 ): Promise<OrganizationSchema> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can update workspace settings"
+      "Only organization Owners and Admins can update workspace settings",
     );
   }
 
@@ -258,7 +257,7 @@ export async function updateOrganization(
     if (existing) {
       throw new AppError(
         HttpStatusCodes.CONFLICT,
-        `Organization slug '${cleanSlug}' is already taken`
+        `Organization slug '${cleanSlug}' is already taken`,
       );
     }
     updateData.slug = cleanSlug;
@@ -300,14 +299,14 @@ export async function updateOrganization(
 
 export async function deleteOrganization(
   userId: string,
-  idOrSlug: string
+  idOrSlug: string,
 ): Promise<{ message: string }> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only the organization Owner can delete this workspace"
+      "Only the organization Owner can delete this workspace",
     );
   }
 
@@ -323,7 +322,7 @@ export async function deleteOrganization(
   if (otherActiveMembersCount > 0) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "Cannot delete organization while active team members remain. Please remove all team members before deleting the workspace."
+      "Cannot delete organization while active team members remain. Please remove all team members before deleting the workspace.",
     );
   }
 
@@ -352,7 +351,7 @@ export async function deleteOrganization(
 
 export async function getOrganizationMembers(
   userId: string,
-  idOrSlug: string
+  idOrSlug: string,
 ): Promise<MemberSchema[]> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
@@ -370,7 +369,7 @@ export async function getOrganizationMembers(
     },
   });
 
-  return memberships.map((m) => ({
+  return memberships.map(m => ({
     id: m.id,
     userId: m.userId,
     name: m.user.name,
@@ -386,21 +385,21 @@ export async function updateMemberRole(
   userId: string,
   idOrSlug: string,
   memberId: string,
-  data: UpdateMemberRoleSchema
+  data: UpdateMemberRoleSchema,
 ): Promise<MemberSchema> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can manage team member roles"
+      "Only organization Owners and Admins can manage team member roles",
     );
   }
 
   if (data.roleName === "Owner" && currentOrg.role !== "Owner") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only the workspace Owner can promote members to Owner"
+      "Only the workspace Owner can promote members to Owner",
     );
   }
 
@@ -421,14 +420,14 @@ export async function updateMemberRole(
   if (targetMembership.role.name === "Owner" && currentOrg.role !== "Owner") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Admins cannot modify the workspace Owner's role"
+      "Admins cannot modify the workspace Owner's role",
     );
   }
 
   if (targetMembership.userId === currentOrg.createdBy && data.roleName !== "Owner") {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "The creator of the organization must always remain an Owner. Transfer workspace ownership first before changing role."
+      "The creator of the organization must always remain an Owner. Transfer workspace ownership first before changing role.",
     );
   }
 
@@ -469,7 +468,7 @@ export async function updateMemberRole(
 export async function removeMember(
   userId: string,
   idOrSlug: string,
-  memberId: string
+  memberId: string,
 ): Promise<{ message: string }> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
@@ -492,21 +491,21 @@ export async function removeMember(
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can remove team members"
+      "Only organization Owners and Admins can remove team members",
     );
   }
 
   if (!isSelf && currentOrg.role === "Admin" && targetMembership.role.name === "Owner") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Admins cannot remove workspace Owners"
+      "Admins cannot remove workspace Owners",
     );
   }
 
   if (targetMembership.userId === currentOrg.createdBy) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "The creator of the organization cannot leave or be removed. Workspace ownership must be transferred first."
+      "The creator of the organization cannot leave or be removed. Workspace ownership must be transferred first.",
     );
   }
 
@@ -522,7 +521,7 @@ export async function removeMember(
     if (ownerCount <= 1) {
       throw new AppError(
         HttpStatusCodes.BAD_REQUEST,
-        "Cannot remove the workspace Owner when they are the sole owner. Transfer ownership first."
+        "Cannot remove the workspace Owner when they are the sole owner. Transfer ownership first.",
       );
     }
   }
@@ -556,14 +555,14 @@ export async function removeMember(
 export async function createInvitation(
   userId: string,
   idOrSlug: string,
-  data: CreateInvitationSchema
+  data: CreateInvitationSchema,
 ): Promise<InvitationSchema> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can invite new team members"
+      "Only organization Owners and Admins can invite new team members",
     );
   }
 
@@ -581,7 +580,7 @@ export async function createInvitation(
   if (existingMember) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      `User '${targetEmail}' is already an active member of this organization`
+      `User '${targetEmail}' is already an active member of this organization`,
     );
   }
 
@@ -646,14 +645,14 @@ export async function createInvitation(
 
 export async function getOrganizationInvitations(
   userId: string,
-  idOrSlug: string
+  idOrSlug: string,
 ): Promise<InvitationSchema[]> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can view pending invitations"
+      "Only organization Owners and Admins can view pending invitations",
     );
   }
 
@@ -672,7 +671,7 @@ export async function getOrganizationInvitations(
     },
   });
 
-  return invitations.map((inv) => ({
+  return invitations.map(inv => ({
     id: inv.id,
     organizationId: inv.organizationId,
     organizationName: inv.organization.name,
@@ -689,14 +688,14 @@ export async function getOrganizationInvitations(
 export async function cancelInvitation(
   userId: string,
   idOrSlug: string,
-  invitationId: string
+  invitationId: string,
 ): Promise<{ message: string }> {
   const currentOrg = await getOrganizationByIdOrSlug(userId, idOrSlug);
 
   if (currentOrg.role !== "Owner" && currentOrg.role !== "Admin") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "Only organization Owners and Admins can cancel invitations"
+      "Only organization Owners and Admins can cancel invitations",
     );
   }
 
@@ -731,7 +730,7 @@ export async function cancelInvitation(
 
 export async function acceptInvitation(
   userId: string,
-  token: string
+  token: string,
 ): Promise<{ message: string; organizationId: string }> {
   const invitation = await db.invitation.findUnique({
     where: { token },
@@ -744,14 +743,14 @@ export async function acceptInvitation(
   if (!invitation || invitation.status !== "pending") {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "Invalid or already used invitation token"
+      "Invalid or already used invitation token",
     );
   }
 
   if (invitation.expiresAt < new Date()) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "Invitation token has expired. Please ask your administrator to send a new invitation."
+      "Invitation token has expired. Please ask your administrator to send a new invitation.",
     );
   }
 
@@ -764,7 +763,7 @@ export async function acceptInvitation(
   if (!callerUser || callerUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      `You are not assigned to this invitation.`
+      `You are not assigned to this invitation.`,
     );
   }
 

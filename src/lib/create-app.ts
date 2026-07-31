@@ -1,19 +1,18 @@
 import type { Schema } from "hono";
 
 import { OpenAPIHono } from "@hono/zod-openapi";
+import { cors } from "hono/cors";
 import { requestId } from "hono/request-id";
+import { secureHeaders } from "hono/secure-headers";
 import { notFound, serveEmojiFavicon } from "stoker/middlewares";
 
-import { cors } from "hono/cors";
-import { secureHeaders } from "hono/secure-headers";
-
-import { pinoLogger } from "@/middlewares/pino-logger";
+import env from "@/env";
 import { errorHandler, validationHook } from "@/middlewares/error-handler";
+import { pinoLogger } from "@/middlewares/pino-logger";
 import { globalRateLimiter } from "@/middlewares/rate-limiter";
+import { responseFormatter } from "@/middlewares/response-formatter";
 
 import type { AppBindings, AppOpenAPI } from "./types";
-import env from "@/env";
-import { responseFormatter } from "@/middlewares/response-formatter";
 
 export function createRouter() {
   return new OpenAPIHono<AppBindings>({
@@ -24,7 +23,7 @@ export function createRouter() {
 
 export default function createApp() {
   const app = createRouter();
-  
+
   // Security middlewares
   app.use(cors({
     origin: env.CORS_ORIGIN,
@@ -36,8 +35,8 @@ export default function createApp() {
   app.use(secureHeaders({
     crossOriginResourcePolicy: "cross-origin",
   }));
-  app.use(globalRateLimiter); 
-  
+  app.use(globalRateLimiter);
+
   // Core middlewares
   app.use(requestId())
     .use(serveEmojiFavicon("📝"))

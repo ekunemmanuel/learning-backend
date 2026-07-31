@@ -1,6 +1,5 @@
-import * as HttpStatusPhrases from "stoker/http-status-phrases";
-import { createMessageObjectSchema } from "stoker/openapi/schemas";
 import { z } from "@hono/zod-openapi";
+import * as HttpStatusPhrases from "stoker/http-status-phrases";
 
 export const ZOD_ERROR_MESSAGES = {
   REQUIRED: "Required",

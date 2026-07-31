@@ -1,22 +1,23 @@
 import { createRoute } from "@hono/zod-openapi";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { jsonContent } from "stoker/openapi/helpers";
+
 import {
+  acceptInvitationSchema,
+  createInvitationSchema,
   createOrganizationSchema,
-  updateOrganizationSchema,
-  organizationParamSchema,
-  organizationSchema,
+  invitationListResponseSchema,
+  invitationParamSchema,
+  invitationSchema,
+  memberListResponseSchema,
+  memberParamSchema,
+  memberSchema,
   organizationListResponseSchema,
   organizationMessageResponseSchema,
-  memberParamSchema,
+  organizationParamSchema,
+  organizationSchema,
   updateMemberRoleSchema,
-  memberSchema,
-  memberListResponseSchema,
-  createInvitationSchema,
-  invitationParamSchema,
-  acceptInvitationSchema,
-  invitationSchema,
-  invitationListResponseSchema,
+  updateOrganizationSchema,
 } from "./schema";
 
 const tags = ["Organizations"];
@@ -37,7 +38,7 @@ export const createOrganizationRoute = createRoute({
   responses: {
     [HttpStatusCodes.CREATED]: jsonContent(
       organizationSchema,
-      "Organization workspace created successfully"
+      "Organization workspace created successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.BAD_REQUEST]: jsonContent(organizationMessageResponseSchema, "Validation error"),
@@ -53,7 +54,7 @@ export const getUserOrganizationsRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationListResponseSchema,
-      "List of user organizations"
+      "List of user organizations",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
   },
@@ -71,7 +72,7 @@ export const getOrganizationRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationSchema,
-      "Organization details"
+      "Organization details",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -92,7 +93,7 @@ export const updateOrganizationRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationSchema,
-      "Organization updated successfully"
+      "Organization updated successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -113,7 +114,7 @@ export const deleteOrganizationRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationMessageResponseSchema,
-      "Organization deleted successfully"
+      "Organization deleted successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -137,7 +138,7 @@ export const getOrganizationMembersRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       memberListResponseSchema,
-      "List of organization members"
+      "List of organization members",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -157,7 +158,7 @@ export const updateMemberRoleRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       memberSchema,
-      "Member role updated successfully"
+      "Member role updated successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -177,7 +178,7 @@ export const removeMemberRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationMessageResponseSchema,
-      "Member removed successfully"
+      "Member removed successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -203,7 +204,7 @@ export const createInvitationRoute = createRoute({
   responses: {
     [HttpStatusCodes.CREATED]: jsonContent(
       invitationSchema,
-      "Invitation created successfully"
+      "Invitation created successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -223,7 +224,7 @@ export const getOrganizationInvitationsRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       invitationListResponseSchema,
-      "List of pending invitations"
+      "List of pending invitations",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -242,7 +243,7 @@ export const cancelInvitationRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationMessageResponseSchema,
-      "Invitation cancelled successfully"
+      "Invitation cancelled successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.FORBIDDEN]: jsonContent(organizationMessageResponseSchema, "Forbidden"),
@@ -262,7 +263,7 @@ export const acceptInvitationRoute = createRoute({
   responses: {
     [HttpStatusCodes.OK]: jsonContent(
       organizationMessageResponseSchema,
-      "Invitation accepted successfully"
+      "Invitation accepted successfully",
     ),
     [HttpStatusCodes.UNAUTHORIZED]: jsonContent(organizationMessageResponseSchema, "Unauthorized"),
     [HttpStatusCodes.BAD_REQUEST]: jsonContent(organizationMessageResponseSchema, "Invalid or expired token"),

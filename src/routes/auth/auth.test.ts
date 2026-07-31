@@ -11,7 +11,6 @@ if (env.NODE_ENV !== "test") {
   throw new Error("NODE_ENV must be 'test'");
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const client = testClient(createTestApp(router)) as any;
 
 // Shared session token captured after login — used by protected-route tests
@@ -123,7 +122,7 @@ describe("auth routes", () => {
   it("get /auth/me returns complete authenticated user profile", async () => {
     const response = await client.auth.me.$get(
       {},
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: { Authorization: `Bearer ${authToken}` } },
     );
     expect(response.status).toBe(200);
     if (response.status === 200) {
@@ -171,7 +170,7 @@ describe("auth routes", () => {
   });
 
   it("post /auth/login/mfa rejects login when invalid MFA code is passed", async () => {
-    const response = await client.auth["login"]["mfa"].$post({
+    const response = await client.auth.login.mfa.$post({
       json: {
         identifier: "pablodev",
         password: "password123",
@@ -191,9 +190,9 @@ describe("auth routes", () => {
     // Remove the active MFA method created in the previous test so setup can run cleanly
     await prisma.userMfaMethod.deleteMany();
 
-    const setupRes = await client.auth["mfa"]["setup"].$post(
+    const setupRes = await client.auth.mfa.setup.$post(
       { json: { type: "totp", name: "Authenticator App" } },
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: { Authorization: `Bearer ${authToken}` } },
     );
     expect(setupRes.status).toBe(200);
 
@@ -229,7 +228,7 @@ describe("auth routes", () => {
     // Allowed origin request
     const allowedRes = await client.auth.me.$get(
       {},
-      { headers: { Origin: "http://localhost:5173" } }
+      { headers: { Origin: "http://localhost:5173" } },
     );
     expect(allowedRes.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
     expect(allowedRes.headers.get("access-control-allow-credentials")).toBe("true");
@@ -238,14 +237,14 @@ describe("auth routes", () => {
     // Disallowed origin request
     const disallowedRes = await client.auth.me.$get(
       {},
-      { headers: { Origin: "http://malicious-domain.com" } }
+      { headers: { Origin: "http://malicious-domain.com" } },
     );
     expect(disallowedRes.headers.get("access-control-allow-origin")).toBeNull();
   });
 
   it("returns isMfaEnabled: true and preserves active MFA during unverified re-setup", async () => {
     const dbUser = await prisma.user.findFirst({ orderBy: { createdAt: "desc" } });
-    
+
     // Set an active verified MFA method
     await prisma.userMfaMethod.create({
       data: {
@@ -260,16 +259,16 @@ describe("auth routes", () => {
     // 1. Check profile returns isMfaEnabled: true
     const meRes = await client.auth.me.$get(
       {},
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: { Authorization: `Bearer ${authToken}` } },
     );
     const meJson: any = await meRes.json();
     expect(meRes.status).toBe(200);
     expect(meJson.data.isMfaEnabled).toBe(true);
 
     // 2. Setup a new MFA method (re-setup / change)
-    const setupRes = await client.auth["mfa"]["setup"].$post(
+    const setupRes = await client.auth.mfa.setup.$post(
       { json: { type: "totp", name: "New Authenticator App" } },
-      { headers: { Authorization: `Bearer ${authToken}` } }
+      { headers: { Authorization: `Bearer ${authToken}` } },
     );
     expect(setupRes.status).toBe(200);
     const setupJson: any = await setupRes.json();

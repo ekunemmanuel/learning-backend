@@ -1,22 +1,26 @@
-import { prisma as db } from "@/lib/prisma";
-import { AppError } from "@/lib/errors";
-import * as HttpStatusCodes from "stoker/http-status-codes";
 import { generateSecret, generateURI, verifySync } from "otplib";
 import QRCode from "qrcode";
-import {
+import * as HttpStatusCodes from "stoker/http-status-codes";
+
+/* eslint-disable no-console */
+import { AppError } from "@/lib/errors";
+import { prisma as db } from "@/lib/prisma";
+
+import type {
   CreateAccountSchema,
-  LoginSchema,
+  CreateApiTokenSchema,
   LoginMfaSchema,
-  VerifyOtpSchema,
-  ResendOtpSchema,
-  RefreshTokenSchema,
+  LoginSchema,
   LogoutSchema,
-  ResetPasswordSchema,
   MfaSetupSchema,
   MfaVerifySchema,
-  CreateApiTokenSchema,
+  RefreshTokenSchema,
+  ResendOtpSchema,
+  ResetPasswordSchema,
+  VerifyOtpSchema,
 } from "./schema";
-import { generateOTP, hashText, generateRandomToken, generateBackupCode, normalizeBackupCode, normalizeCountryCode } from "./utils";
+
+import { generateBackupCode, generateOTP, generateRandomToken, hashText, normalizeBackupCode, normalizeCountryCode } from "./utils";
 
 // Duration constants
 const SESSION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -28,10 +32,7 @@ type OtpTypeEnum = "email_verification" | "phone_verification" | "password_reset
  * Get an existing unexpired OTP for (identifier, type), or generate/replace if expired or non-existent.
  * Guarantees uniqueness per (identifier, type).
  */
-export const getOrCreateOtp = async (
-  identifier: string,
-  type: OtpTypeEnum
-): Promise<string> => {
+export async function getOrCreateOtp(identifier: string, type: OtpTypeEnum): Promise<string> {
   const existingOtp = await db.otp.findUnique({
     where: {
       identifier_type: {
@@ -75,13 +76,14 @@ export const getOrCreateOtp = async (
   });
 
   return otpCode;
-};
+}
 
 /**
  * Helper to resolve a user by Email, Username, or Phone number case-insensitively.
  */
-export const findUserByIdentifier = async (rawIdentifier: string) => {
-  if (!rawIdentifier) return null;
+export async function findUserByIdentifier(rawIdentifier: string) {
+  if (!rawIdentifier)
+    return null;
   const trimmed = rawIdentifier.trim();
   const lowercased = trimmed.toLowerCase();
 
@@ -97,9 +99,9 @@ export const findUserByIdentifier = async (rawIdentifier: string) => {
     },
     include: { mfaMethods: { where: { isVerified: true } } },
   });
-};
+}
 
-export const createAccount = async (data: CreateAccountSchema) => {
+export async function createAccount(data: CreateAccountSchema) {
   const normalizedEmail = data.email.trim().toLowerCase();
   const normalizedUsername = data.username ? data.username.trim().toLowerCase() : undefined;
 
@@ -161,9 +163,9 @@ export const createAccount = async (data: CreateAccountSchema) => {
   return {
     message: "Account created successfully. An OTP has been sent for verification",
   };
-};
+}
 
-export const verifyOtp = async (data: VerifyOtpSchema) => {
+export async function verifyOtp(data: VerifyOtpSchema) {
   const { identifier, code, type } = data;
 
   const targetUser = await findUserByIdentifier(identifier);
@@ -189,7 +191,7 @@ export const verifyOtp = async (data: VerifyOtpSchema) => {
 
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "OTP has expired. A new verification code has been sent"
+      "OTP has expired. A new verification code has been sent",
     );
   }
 
@@ -215,7 +217,8 @@ export const verifyOtp = async (data: VerifyOtpSchema) => {
           targetId: targetUser.id,
         },
       });
-    } else if (type === "phone_verification") {
+    }
+    else if (type === "phone_verification") {
       await db.user.update({
         where: { id: targetUser.id },
         data: { isPhoneVerified: true, phoneVerifiedAt: new Date() },
@@ -239,9 +242,9 @@ export const verifyOtp = async (data: VerifyOtpSchema) => {
   return {
     message: "Account verified successfully",
   };
-};
+}
 
-export const resendOtp = async (data: ResendOtpSchema) => {
+export async function resendOtp(data: ResendOtpSchema) {
   const { identifier, purpose } = data;
 
   const user = await findUserByIdentifier(identifier);
@@ -255,12 +258,9 @@ export const resendOtp = async (data: ResendOtpSchema) => {
   return {
     message: "An OTP has been sent to your registered contact channel",
   };
-};
+}
 
-export const login = async (
-  data: LoginSchema,
-  clientInfo?: { ip?: string; userAgent?: string }
-) => {
+export async function login(data: LoginSchema, clientInfo?: { ip?: string; userAgent?: string }) {
   const { identifier, password, mfaCode } = data;
 
   // Multi-identifier resolution: match by email OR phone OR username case-insensitively
@@ -303,7 +303,8 @@ export const login = async (
     let isMfaValid = user.mfaMethods.some((method) => {
       try {
         return verifySync({ token: mfaCode, secret: method.secretEncrypted || "" }).valid;
-      } catch {
+      }
+      catch {
         return false;
       }
     });
@@ -387,23 +388,20 @@ export const login = async (
     },
     refreshToken: rawRefreshToken,
   };
-};
+}
 
-export const loginWithMfa = async (
-  data: LoginMfaSchema,
-  clientInfo?: { ip?: string; userAgent?: string }
-) => {
+export async function loginWithMfa(data: LoginMfaSchema, clientInfo?: { ip?: string; userAgent?: string }) {
   return login(
     {
       identifier: data.identifier,
       password: data.password,
       mfaCode: data.mfaCode,
     },
-    clientInfo
+    clientInfo,
   );
-};
+}
 
-export const getMe = async (userId: string) => {
+export async function getMe(userId: string) {
   const user = await db.user.findUnique({
     where: { id: userId },
     include: {
@@ -433,9 +431,9 @@ export const getMe = async (userId: string) => {
     phoneVerifiedAt: user.phoneVerifiedAt ? user.phoneVerifiedAt.toISOString() : null,
     isMfaEnabled,
   };
-};
+}
 
-export const refreshSession = async (data: RefreshTokenSchema) => {
+export async function refreshSession(data: RefreshTokenSchema) {
   if (!data.refreshToken) {
     throw new AppError(HttpStatusCodes.UNAUTHORIZED, "Refresh token is required");
   }
@@ -483,9 +481,9 @@ export const refreshSession = async (data: RefreshTokenSchema) => {
     message: "Session refreshed successfully",
     refreshToken: newRawRefreshToken,
   };
-};
+}
 
-export const logout = async (data: LogoutSchema) => {
+export async function logout(data: LogoutSchema) {
   if (!data.refreshToken) {
     return { message: "Logged out successfully" };
   }
@@ -514,9 +512,9 @@ export const logout = async (data: LogoutSchema) => {
   return {
     message: "Logged out successfully",
   };
-};
+}
 
-export const resetPassword = async (data: ResetPasswordSchema) => {
+export async function resetPassword(data: ResetPasswordSchema) {
   const { identifier, code, newPassword } = data;
 
   const user = await findUserByIdentifier(identifier);
@@ -570,9 +568,9 @@ export const resetPassword = async (data: ResetPasswordSchema) => {
   return {
     message: "Password reset successfully. Please log in with your new password",
   };
-};
+}
 
-export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
+export async function setupMfa(userId: string, data: MfaSetupSchema) {
   const user = await db.user.findUnique({
     where: { id: userId },
     include: { mfaMethods: true },
@@ -582,7 +580,7 @@ export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
     throw new AppError(HttpStatusCodes.NOT_FOUND, "User account not found for MFA setup");
   }
 
-  const activeMethod = user.mfaMethods.find((m) => m.type === data.type && m.isVerified);
+  const activeMethod = user.mfaMethods.find(m => m.type === data.type && m.isVerified);
   const isMfaEnabled = Boolean(activeMethod);
 
   const accountName = user.email || user.username || userId;
@@ -597,7 +595,7 @@ export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
   const qrCodeDataUrl = await QRCode.toDataURL(otpauth);
 
   // If there is an existing unverified draft method for this type, update it; otherwise create a new unverified method record
-  const unverifiedMethod = user.mfaMethods.find((m) => m.type === data.type && !m.isVerified);
+  const unverifiedMethod = user.mfaMethods.find(m => m.type === data.type && !m.isVerified);
 
   let mfaMethod;
   if (unverifiedMethod) {
@@ -608,7 +606,8 @@ export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
         secretEncrypted: secret,
       },
     });
-  } else {
+  }
+  else {
     mfaMethod = await db.userMfaMethod.create({
       data: {
         userId,
@@ -630,9 +629,9 @@ export const setupMfa = async (userId: string, data: MfaSetupSchema) => {
     qrCodeDataUrl,
     isMfaEnabled,
   };
-};
+}
 
-export const verifyMfa = async (userId: string, data: MfaVerifySchema) => {
+export async function verifyMfa(userId: string, data: MfaVerifySchema) {
   const mfaMethod = await db.userMfaMethod.findFirst({
     where: { id: data.methodId, userId },
   });
@@ -648,14 +647,15 @@ export const verifyMfa = async (userId: string, data: MfaVerifySchema) => {
       token: data.code,
       secret: mfaMethod.secretEncrypted || "",
     }).valid;
-  } catch {
+  }
+  catch {
     isValid = false;
   }
 
   if (!isValid) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "Invalid TOTP code. Please check your Authenticator app time and enter the 6-digit code again."
+      "Invalid TOTP code. Please check your Authenticator app time and enter the 6-digit code again.",
     );
   }
 
@@ -713,9 +713,9 @@ export const verifyMfa = async (userId: string, data: MfaVerifySchema) => {
     message: "MFA enabled successfully",
     backupCodes: rawBackupCodes,
   };
-};
+}
 
-export const createApiToken = async (userId: string, data: CreateApiTokenSchema) => {
+export async function createApiToken(userId: string, data: CreateApiTokenSchema) {
   const rawToken = `sk_live_${generateRandomToken(32)}`;
   const tokenHash = await hashText(rawToken);
 
@@ -749,4 +749,4 @@ export const createApiToken = async (userId: string, data: CreateApiTokenSchema)
     scopes: apiToken.scopes,
     apiToken: rawToken,
   };
-};
+}

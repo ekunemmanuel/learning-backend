@@ -1,5 +1,6 @@
-import type { ErrorHandler } from "hono";
 import type { Hook } from "@hono/zod-openapi";
+import type { ErrorHandler } from "hono";
+
 import { HTTPException } from "hono/http-exception";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import * as HttpStatusPhrases from "stoker/http-status-phrases";
@@ -27,7 +28,7 @@ export const errorHandler: ErrorHandler = (err, c) => {
       case "P2025": // Record not found
         return c.json(
           {
-          message: HttpStatusPhrases.NOT_FOUND,
+            message: HttpStatusPhrases.NOT_FOUND,
             success: false,
           },
           HttpStatusCodes.NOT_FOUND,
@@ -81,7 +82,7 @@ export const validationHook: Hook<any, any, any, any> = (result, c) => {
       {
         message: "Validation Error",
         success: false,
-        errors: result.error.issues.map((issue) => ({
+        errors: result.error.issues.map(issue => ({
           field: issue.path.join("."),
           message: issue.message,
         })),
@@ -90,4 +91,3 @@ export const validationHook: Hook<any, any, any, any> = (result, c) => {
     );
   }
 };
-

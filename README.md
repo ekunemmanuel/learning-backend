@@ -16,16 +16,19 @@ A production-ready backend boilerplate using Hono, Prisma, PostgreSQL, and Bun. 
 ## Getting Started
 
 ### Prerequisites
+
 - [Bun](https://bun.sh) installed
 - A PostgreSQL database running
 
 ### Installation
 
 1. Install dependencies:
+
    ```bash
    bun install
    ```
-   *(Note: The Prisma client is automatically generated during postinstall)*
+
+   _(Note: The Prisma client is automatically generated during postinstall)_
 
 2. Environment Setup:
    Copy `.env.example` to `.env` and fill in your details:
@@ -42,6 +45,7 @@ A production-ready backend boilerplate using Hono, Prisma, PostgreSQL, and Bun. 
 ### Development
 
 Start the development server with hot-reload:
+
 ```bash
 bun run dev
 ```
@@ -51,6 +55,7 @@ Open [http://localhost:3000/reference](http://localhost:3000/reference) to view 
 ### Testing
 
 Run the automated test suite:
+
 ```bash
 bun test
 ```
@@ -69,19 +74,21 @@ bun test
 
 ## How to Build a Module
 
-This API uses a modular architecture. Each feature is completely self-contained within its own folder inside `src/routes/`. 
+This API uses a modular architecture. Each feature is completely self-contained within its own folder inside `src/routes/`.
 
 To create a new module, you should follow the exact pattern based on the provided `examples` folder reference.
 
-1. **`schema.ts`**: Define your Zod schemas for validation here. 
+1. **`schema.ts`**: Define your Zod schemas for validation here.
 2. **`routes.ts`**: Define your OpenAPI route configurations using `@hono/zod-openapi`.
-3. **`services.ts`**: Place all your business logic and database interactions here. 
+3. **`services.ts`**: Place all your business logic and database interactions here.
 4. **`handlers.ts`**: Write the actual Hono HTTP handlers.
 5. **`index.ts`**: Tie the `routes.ts` and `handlers.ts` together into a Hono router and export it.
 6. **`*.test.ts`**: Write Vitest tests for the module's endpoints ensuring all routes and validation rules are working properly.
 
 ### Registering your Module
+
 Once you've built a new module folder (e.g., `src/routes/users`), you need to register it in `src/app.ts` so that Hono knows about it:
+
 ```typescript
 import users from "./routes/users/index"; // Import your module's index
 

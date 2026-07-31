@@ -1,7 +1,9 @@
 import type { MiddlewareHandler } from "hono";
-import { prisma as db } from "@/lib/prisma";
-import { AppError } from "@/lib/errors";
+
 import * as HttpStatusCodes from "stoker/http-status-codes";
+
+import { AppError } from "@/lib/errors";
+import { prisma as db } from "@/lib/prisma";
 
 /**
  * Tenant Middleware
@@ -22,12 +24,12 @@ export const tenantMiddleware: MiddlewareHandler = async (c, next) => {
   if (!idOrSlug) {
     throw new AppError(
       HttpStatusCodes.BAD_REQUEST,
-      "Organization ID or slug is required to access this tenant resource"
+      "Organization ID or slug is required to access this tenant resource",
     );
   }
 
-  const isUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrSlug);
+  const isUuid
+    = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idOrSlug);
 
   const organization = await db.organization.findFirst({
     where: {
@@ -63,7 +65,7 @@ export const tenantMiddleware: MiddlewareHandler = async (c, next) => {
   if (!membership || membership.status !== "active") {
     throw new AppError(
       HttpStatusCodes.FORBIDDEN,
-      "You are not an active member of this organization"
+      "You are not an active member of this organization",
     );
   }
 

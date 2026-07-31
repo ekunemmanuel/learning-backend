@@ -15,7 +15,7 @@ export const createAccountSchema = z.object({
   name: z.string().min(1).max(500),
   email: z.email(),
   password: z.string().min(8).max(100),
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_-]+$/, "Username can only contain alphanumeric characters, underscores, and hyphens").optional(),
+  username: z.string().min(3).max(30).regex(/^[\w-]+$/, "Username can only contain alphanumeric characters, underscores, and hyphens").optional(),
   phone: z.string().regex(e164PhoneRegex, "Phone number must be in E.164 international format (e.g. +1234567890)").optional(),
   country: z.string().optional(),
   avatarUrl: z.url().optional(),
@@ -83,7 +83,6 @@ export const createApiTokenSchema = z.object({
   scopes: z.array(z.string()).default([]),
   expiresInDays: z.number().int().positive().optional(),
 });
-
 
 // ============================================================================
 // RESPONSE SCHEMAS
@@ -160,7 +159,6 @@ export const createApiTokenResponseSchema = z.object({
   scopes: z.array(z.string()),
   apiToken: z.string(),
 });
-
 
 // Types
 export type CreateAccountSchema = z.infer<typeof createAccountSchema>;

@@ -1,23 +1,26 @@
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import * as HttpStatusCodes from "stoker/http-status-codes";
-import { setCookie, getCookie, deleteCookie } from "hono/cookie";
+
 import type { AppRouteHandler } from "@/lib/types";
-import { prisma as db } from "@/lib/prisma";
+
+import env from "@/env";
 
 import type {
-  SignRoute,
-  VerifyRoute,
-  LoginRoute,
-  LoginMfaRoute,
+  CreateApiTokenRoute,
   GetMeRoute,
-  ResendOtpRoute,
-  RefreshRoute,
+  LoginMfaRoute,
+  LoginRoute,
   LogoutRoute,
-  ResetPasswordRoute,
+  MfaPageRoute,
   MfaSetupRoute,
   MfaVerifyRoute,
-  MfaPageRoute,
-  CreateApiTokenRoute,
+  RefreshRoute,
+  ResendOtpRoute,
+  ResetPasswordRoute,
+  SignRoute,
+  VerifyRoute,
 } from "./routes";
+
 import * as AuthService from "./services";
 
 const REFRESH_TOKEN_COOKIE = "refreshToken";
@@ -46,7 +49,7 @@ export const login: AppRouteHandler<LoginRoute> = async (c) => {
   if (result.refreshToken) {
     setCookie(c, REFRESH_TOKEN_COOKIE, result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: env.NODE_ENV === "production",
       sameSite: "Lax",
       path: "/",
       maxAge: COOKIE_MAX_AGE,
@@ -66,7 +69,7 @@ export const loginMfa: AppRouteHandler<LoginMfaRoute> = async (c) => {
   if (result.refreshToken) {
     setCookie(c, REFRESH_TOKEN_COOKIE, result.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: env.NODE_ENV === "production",
       sameSite: "Lax",
       path: "/",
       maxAge: COOKIE_MAX_AGE,
@@ -99,7 +102,7 @@ export const refresh: AppRouteHandler<RefreshRoute> = async (c) => {
   // Set updated rotated HTTP-Only refresh token cookie
   setCookie(c, REFRESH_TOKEN_COOKIE, result.refreshToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.NODE_ENV === "production",
     sameSite: "Lax",
     path: "/",
     maxAge: COOKIE_MAX_AGE,
