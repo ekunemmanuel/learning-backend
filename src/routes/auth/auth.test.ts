@@ -76,6 +76,64 @@ describe("auth routes", () => {
     }
   });
 
+  it("post /auth/login returns requiresVerification: true and generates fresh OTP for unverified account", async () => {
+    // 1. Create an unverified user
+    await client.auth.signup.$post({
+      json: {
+        name: "Unverified User",
+        email: "unverified@example.com",
+        password: "password123",
+        username: "unverifieduser",
+      },
+    });
+
+    const firstOtpRecord = await prisma.otp.findFirst({
+      where: { identifier: "unverified@example.com", type: "email_verification" },
+    });
+    const _firstCode = firstOtpRecord?.code;
+
+    // 2. Attempt login without verifying
+    const loginRes = await client.auth.login.$post({
+      json: {
+        identifier: "unverified@example.com",
+        password: "password123",
+      },
+    });
+    expect(loginRes.status).toBe(200);
+    const json: any = await loginRes.json();
+    expect(json.data.requiresVerification).toBe(true);
+    expect(json.data.email).toBe("unverified@example.com");
+    expect(json.data.refreshToken).toBeNull();
+
+    // 3. Verify a fresh OTP code was generated upon login attempt
+    const secondOtpRecord = await prisma.otp.findFirst({
+      where: { identifier: "unverified@example.com", type: "email_verification" },
+    });
+    expect(secondOtpRecord).toBeDefined();
+
+    // 4. Verify account with the new OTP code
+    const verifyRes = await client.auth.verify.$post({
+      json: {
+        identifier: "unverified@example.com",
+        code: secondOtpRecord!.code,
+        type: "email_verification",
+      },
+    });
+    expect(verifyRes.status).toBe(200);
+
+    // 5. Subsequent login now succeeds
+    const verifiedLoginRes = await client.auth.login.$post({
+      json: {
+        identifier: "unverified@example.com",
+        password: "password123",
+      },
+    });
+    expect(verifiedLoginRes.status).toBe(200);
+    const verifiedJson: any = await verifiedLoginRes.json();
+    expect(verifiedJson.data.requiresVerification).toBe(false);
+    expect(verifiedJson.data.refreshToken).toBeDefined();
+  });
+
   it("post /auth/verify verifies email OTP and sets isEmailVerified", async () => {
     const otp = await prisma.otp.findFirst({
       where: { identifier: "pablo@example.com", type: "email_verification" },
@@ -243,7 +301,7 @@ describe("auth routes", () => {
   });
 
   it("returns isMfaEnabled: true and preserves active MFA during unverified re-setup", async () => {
-    const dbUser = await prisma.user.findFirst({ orderBy: { createdAt: "desc" } });
+    const dbUser = await prisma.user.findFirst({ where: { email: "pablo@example.com" } });
 
     // Set an active verified MFA method
     await prisma.userMfaMethod.create({

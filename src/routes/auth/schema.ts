@@ -99,6 +99,8 @@ export const verifyResponseSchema = z.object({
 export const loginResponseSchema = z.object({
   message: z.string(),
   mfaRequired: z.boolean().default(false),
+  requiresVerification: z.boolean().default(false),
+  email: z.string().optional(),
   user: z.object({
     email: z.string(),
     name: z.string().nullable(),

@@ -33,6 +33,9 @@ type OtpTypeEnum = "email_verification" | "phone_verification" | "password_reset
  * Guarantees uniqueness per (identifier, type).
  */
 export async function getOrCreateOtp(identifier: string, type: OtpTypeEnum): Promise<string> {
+  const newCode = generateOTP(4);
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+
   const existingOtp = await db.otp.findUnique({
     where: {
       identifier_type: {
@@ -43,20 +46,12 @@ export async function getOrCreateOtp(identifier: string, type: OtpTypeEnum): Pro
   });
 
   if (existingOtp) {
-    if (existingOtp.expiresAt > new Date()) {
-      // Reuse unexpired OTP
-      console.log(`[AUTH] Reusing valid OTP ${existingOtp.code} (${type}) for ${identifier}`);
-      return existingOtp.code;
-    }
-
-    // Replace expired OTP
-    const newCode = generateOTP(4);
-    console.log(`[AUTH] Replacing expired OTP with ${newCode} (${type}) for ${identifier}`);
+    console.log(`[AUTH] Generating fresh OTP ${newCode} (${type}) for ${identifier}`);
     await db.otp.update({
       where: { id: existingOtp.id },
       data: {
         code: newCode,
-        expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+        expiresAt,
       },
     });
 
@@ -64,18 +59,17 @@ export async function getOrCreateOtp(identifier: string, type: OtpTypeEnum): Pro
   }
 
   // Create new unique OTP record
-  const otpCode = generateOTP(4);
-  console.log(`[AUTH] Created new OTP ${otpCode} (${type}) for ${identifier}`);
+  console.log(`[AUTH] Created new OTP ${newCode} (${type}) for ${identifier}`);
   await db.otp.create({
     data: {
       identifier,
-      code: otpCode,
+      code: newCode,
       type,
-      expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+      expiresAt,
     },
   });
 
-  return otpCode;
+  return newCode;
 }
 
 /**
@@ -287,6 +281,21 @@ export async function login(data: LoginSchema, clientInfo?: { ip?: string; userA
     throw new AppError(HttpStatusCodes.FORBIDDEN, "Account has been deactivated");
   }
 
+  // Check account verification requirement before granting access
+  if (!user.isEmailVerified && !user.isPhoneVerified) {
+    const otpCode = await getOrCreateOtp(user.email, "email_verification");
+    console.log(`[AUTH] Account unverified for ${user.email}. Generated fresh OTP ${otpCode}`);
+
+    return {
+      message: "Please verify your account to continue. A verification code has been sent to your email.",
+      requiresVerification: true,
+      email: user.email,
+      mfaRequired: false,
+      user: null,
+      refreshToken: null,
+    };
+  }
+
   // Check 2FA requirement if user has active verified MFA methods
   if (user.mfaMethods.length > 0) {
     // If no MFA code is supplied in step 1, notify the frontend to prompt for MFA code!
@@ -382,6 +391,7 @@ export async function login(data: LoginSchema, clientInfo?: { ip?: string; userA
   return {
     message: "Login successful",
     mfaRequired: false,
+    requiresVerification: false,
     user: {
       email: user.email,
       name: user.name,

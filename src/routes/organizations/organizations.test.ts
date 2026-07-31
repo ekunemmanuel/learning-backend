@@ -36,6 +36,7 @@ describe("organizations, memberships, and invitations routes", () => {
 
     const dbUser1 = await prisma.user.findFirst({ where: { email: "alice@example.com" } });
     const _user1Id = dbUser1!.id;
+    await prisma.user.update({ where: { id: _user1Id }, data: { isEmailVerified: true } });
 
     const login1Res = await client.auth.login.$post({
       json: { identifier: "alice@example.com", password: "password123" },
@@ -56,6 +57,7 @@ describe("organizations, memberships, and invitations routes", () => {
 
     const dbUser2 = await prisma.user.findFirst({ where: { email: "bob@example.com" } });
     const _user2Id = dbUser2!.id;
+    await prisma.user.update({ where: { id: _user2Id }, data: { isEmailVerified: true } });
 
     const login2Res = await client.auth.login.$post({
       json: { identifier: "bob@example.com", password: "password123" },
