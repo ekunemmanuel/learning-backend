@@ -1,16 +1,19 @@
 import { randomBytes } from "node:crypto";
-import { prisma as db } from "@/lib/prisma";
-import { AppError } from "@/lib/errors";
+
 import * as HttpStatusCodes from "stoker/http-status-codes";
+
 import env from "@/env";
+import { AppError } from "@/lib/errors";
+import { prisma as db } from "@/lib/prisma";
+
 import type {
-  CreateOrganizationSchema,
-  UpdateOrganizationSchema,
-  OrganizationSchema,
-  MemberSchema,
-  UpdateMemberRoleSchema,
   CreateInvitationSchema,
+  CreateOrganizationSchema,
   InvitationSchema,
+  MemberSchema,
+  OrganizationSchema,
+  UpdateMemberRoleSchema,
+  UpdateOrganizationSchema,
 } from "./schema";
 
 /**
@@ -624,6 +627,7 @@ export async function createInvitation(
   const inviteUrl = `${env.FRONTEND_URL}/invitations/accept?token=${token}&email=${encodeURIComponent(targetEmail)}&org=${invitation.organization.slug}`;
 
   // Log magic link for development / SMTP integration
+  // eslint-disable-next-line no-console
   console.log(`[INVITATION] Magic Link created for ${targetEmail}: ${inviteUrl}`);
 
   return {
